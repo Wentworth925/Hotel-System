@@ -1,93 +1,86 @@
 <?php
-require 'includes/auth.php';
-require 'includes/db.php';
+require '../includes/auth.php';
+require '../includes/db.php';
 require_login();
 
-$id = $_GET['id'] ?? null;
-if (!$id) {
-    header('Location: rooms_list.php');
+if (!isset($_GET['id']) || empty($_GET['id'])) {
+    header('Location: list.php');
     exit;
 }
 
-$stmt = $pdo->prepare("SELECT * FROM rooms WHERE id = ?");
+$id = intval($_GET['id']);
+
+$stmt = $pdo->prepare("SELECT * FROM reservations WHERE id = ?");
 $stmt->execute([$id]);
-$room = $stmt->fetch(PDO::FETCH_ASSOC);
-if (!$room) {
-    header('Location: rooms_list.php');
+$reservation = $stmt->fetch(PDO::FETCH_ASSOC);
+
+if (!$reservation) {
+    header('Location: list.php');
     exit;
 }
 
-$err = '';
-$success = '';
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $room_number = trim($_POST['room_number']);
-    $room_type = trim($_POST['room_type']);
-    $price = trim($_POST['price']);
-    $status = trim($_POST['status']);
-    $description = trim($_POST['description']);
-
-    if (!$room_number || !$room_type || !$price || !$status) {
-        $err = "All fields except description are required.";
-    } else {
-        $stmt = $pdo->prepare("UPDATE rooms SET room_number=?, room_type=?, price=?, status=?, description=? WHERE id=?");
-        if ($stmt->execute([$room_number, $room_type, $price, $status, $description, $id])) {
-            $success = "Room updated successfully!";
-            $stmt = $pdo->prepare("SELECT * FROM rooms WHERE id = ?");
-            $stmt->execute([$id]);
-            $room = $stmt->fetch(PDO::FETCH_ASSOC);
-        } else {
-            $err = "Failed to update room.";
-        }
-    }
-}
+$rooms = $pdo->query("SELECT id, room_number FROM rooms WHERE status='available' OR id={$reservation['room_id']}")->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Edit Room</title>
+<title>Edit Reservation</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body class="bg-light">
 <div class="container mt-5">
-    <h2>Edit Room #<?php echo $room['id']; ?></h2>
+<h3>Edit Reservation</h3>
 
-    <?php if ($err): ?>
-        <div class="alert alert-danger"><?php echo htmlspecialchars($err); ?></div>
-    <?php endif; ?>
-    <?php if ($success): ?>
-        <div class="alert alert-success"><?php echo htmlspecialchars($success); ?></div>
-    <?php endif; ?>
+<form method="POST" action="save_edit.php">
+    <input type="hidden" name="id" value="<?php echo $reservation['id']; ?>">
 
-    <form method="post">
-        <div class="mb-3">
-            <label>Room Number</label>
-            <input name="room_number" class="form-control" value="<?php echo htmlspecialchars($room['room_number']); ?>" required>
-        </div>
-        <div class="mb-3">
-            <label>Room Type</label>
-            <input name="room_type" class="form-control" value="<?php echo htmlspecialchars($room['room_type']); ?>" required>
-        </div>
-        <div class="mb-3">
-            <label>Price</label>
-            <input name="price" type="number" class="form-control" value="<?php echo htmlspecialchars($room['price']); ?>" required>
-        </div>
-        <div class="mb-3">
-            <label>Status</label>
-            <select name="status" class="form-control" required>
-                <option value="available" <?php if($room['status']=='available') echo 'selected'; ?>>Available</option>
-                <option value="booked" <?php if($room['status']=='booked') echo 'selected'; ?>>Booked</option>
-            </select>
-        </div>
-        <div class="mb-3">
-            <label>Description</label>
-            <textarea name="description" class="form-control"><?php echo htmlspecialchars($room['description']); ?></textarea>
-        </div>
-        <button class="btn btn-primary">Save Changes</button>
-        <a href="rooms_list.php" class="btn btn-secondary">Back</a>
-    </form>
+    <div class="mb-3">
+        <label class="form-label">Room</label>
+        <select name="room_id" class="form-control" required>
+            <option value="">Select a room</option>
+            <?php foreach ($rooms as $room): ?>
+                <option value="<?php echo $room['id']; ?>" <?php if($room['id']==$reservation['room_id']) echo 'selected'; ?>>
+                    Room <?php echo $room['room_number']; ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Guest Name</label>
+        <input type="text" name="guest_name" class="form-control" value="<?php echo htmlspecialchars($reservation['guest_name']); ?>" required>
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Guest Contact</label>
+        <input type="text" name="guest_contact" class="form-control" value="<?php echo htmlspecialchars($reservation['guest_contact']); ?>">
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Check-in Date</label>
+        <input type="date" name="check_in" class="form-control" value="<?php echo $reservation['check_in']; ?>" required>
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Check-out Date</label>
+        <input type="date" name="check_out" class="form-control" value="<?php echo $reservation['check_out']; ?>" required>
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Notes</label>
+        <textarea name="notes" class="form-control"><?php echo htmlspecialchars($reservation['notes']); ?></textarea>
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Total Cost</label>
+        <input type="number" step="0.01" name="total_cost" class="form-control" value="<?php echo $reservation['total_cost']; ?>" required>
+    </div>
+
+    <button type="submit" class="btn btn-success">Save Changes</button>
+    <a href="list.php" class="btn btn-secondary">Cancel</a>
+</form>
 </div>
 </body>
 </html>
